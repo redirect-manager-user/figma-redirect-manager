@@ -15,7 +15,7 @@
     {
       "src": "/r/(.*)",
       "dest": "/api/r/$1"
-    }
+    },
     {
       "src": "/static/(.*)",
       "dest": "/static/$1"
