@@ -15,8 +15,7 @@ import {
     doc,
     setDoc,
     updateDoc,
-    deleteDoc,
-    getDoc
+    deleteDoc
 } from 'firebase/firestore';
 
 // --- Firebase Configuration ---
@@ -33,7 +32,14 @@ const db = getFirestore(app); // Initialize Firestore
 // --- Shadcn UI-style Components ---
 const Card = ({ className, ...props }) => <div className={`rounded-xl border bg-card text-card-foreground shadow-sm ${className}`} {...props} />;
 const CardHeader = ({ className, ...props }) => <div className={`flex flex-col space-y-1.5 p-6 ${className}`} {...props} />;
-const CardTitle = ({ className, ...props }) => <h3 className={`text-2xl font-semibold leading-none tracking-tight ${className}`} {...props} />;
+
+// FIX: Rewrote CardTitle to be more explicit for the linter to prevent jsx-a11y error
+const CardTitle = ({ className, children, ...props }) => (
+    <h3 className={`text-2xl font-semibold leading-none tracking-tight ${className}`} {...props}>
+        {children}
+    </h3>
+);
+
 const CardContent = ({ className, ...props }) => <div className={`p-6 pt-0 ${className}`} {...props} />;
 const Input = React.forwardRef(({ className, ...props }, ref) => <input className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`} ref={ref} {...props} />);
 const Button = ({ className, variant = 'default', size = 'default', ...props }) => {
@@ -68,7 +74,6 @@ const LoginScreen = ({ onLogin, error, isLoading }) => {
         </div>
     );
 };
-
 
 // --- Main App Component ---
 export default function App() {
@@ -134,6 +139,7 @@ export default function App() {
 
     const handleLogout = async () => { await signOut(auth); };
 
+    // NOTE: This ID is now only used for the document ID in Firestore
     const generateComponentId = (name) => name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
     const handleSubmit = async (e) => {
@@ -143,13 +149,15 @@ export default function App() {
         setError(null);
         const componentId = generateComponentId(newComponentName);
 
-        if (components.some(c => c.id === componentId)) {
+        const docRef = doc(db, 'components', componentId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
             setError("A component with this name already exists.");
             return;
         }
         
         try {
-            const docRef = doc(db, 'components', componentId);
             await setDoc(docRef, {
                 uid: user.uid,
                 name: newComponentName,
@@ -218,6 +226,7 @@ export default function App() {
     };
 
     if (isAuthLoading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    
     if (!user) return <LoginScreen onLogin={handleLogin} error={authError} isLoading={isAuthLoading} />;
 
     const getBaseUrl = () => window.location.protocol + '//' + window.location.host;
