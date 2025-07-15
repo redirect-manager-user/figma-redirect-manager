@@ -1,7 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, doc, deleteDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { db, auth } from './firebase';
+import React, { useState } from 'react';
 
 // --- Shadcn UI-style Components (using Tailwind CSS) ---
 
@@ -46,62 +43,15 @@ const Label = ({ className, ...props }) => (
     <label className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 ${className}`} {...props} />
 );
 
-// --- Login Screen Component ---
-const LoginScreen = ({ onLogin, onRegister, error }) => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-
-    const handleLogin = (e) => {
-        e.preventDefault();
-        onLogin(email, password);
-    };
-
-    const handleRegister = (e) => {
-        e.preventDefault();
-        onRegister(email, password);
-    };
-
-    return (
-        <div className="flex items-center justify-center min-h-screen bg-background">
-            <Card className="w-full max-w-sm">
-                <CardHeader>
-                    <CardTitle>Login or Register</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <form className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
-                            <Input id="email" type="email" placeholder="m@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="password">Password</Label>
-                            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-                        </div>
-                        {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-                        <div className="flex flex-col sm:flex-row gap-2">
-                           <Button onClick={handleLogin} className="w-full">Login</Button>
-                           <Button onClick={handleRegister} variant="outline" className="w-full">Register</Button>
-                        </div>
-                    </form>
-                </CardContent>
-            </Card>
-        </div>
-    );
-};
-
 
 // --- Main App Component ---
 
 export default function App() {
     // --- State Management ---
-    const [user, setUser] = useState(null);
-    const [isAuthReady, setIsAuthReady] = useState(false);
     const [components, setComponents] = useState([]);
     const [newComponentName, setNewComponentName] = useState('');
     const [mainUrl, setMainUrl] = useState('');
     const [latestUrl, setLatestUrl] = useState('');
-    const [isLoading, setIsLoading] = useState(true);
-    const [authError, setAuthError] = useState(null);
     const [error, setError] = useState(null);
     const [copiedLink, setCopiedLink] = useState(null);
 
@@ -109,108 +59,36 @@ export default function App() {
     const [editingComponentId, setEditingComponentId] = useState(null);
     const [editedMainUrl, setEditedMainUrl] = useState('');
     const [editedLatestUrl, setEditedLatestUrl] = useState('');
-
-    const appId = process.env.REACT_APP_APP_ID || 'default-figma-redirect-app';
-
-
-    // --- Authentication Effect ---
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-            setUser(currentUser);
-            setIsAuthReady(true);
-        });
-        return () => unsubscribe();
-    }, []);
-
-    // --- Firestore Data Fetching Effect ---
-    useEffect(() => {
-        if (!isAuthReady || !user) {
-            setIsLoading(false);
-            setComponents([]); // Clear components if user logs out
-            return;
-        };
-
-        setIsLoading(true);
-        const componentsCollectionRef = collection(db, `artifacts/${appId}/users/${user.uid}/components`);
-        
-        const unsubscribe = onSnapshot(componentsCollectionRef, (snapshot) => {
-            const fetchedComponents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setComponents(fetchedComponents);
-            setIsLoading(false);
-        }, (err) => {
-            console.error("Firestore snapshot error:", err);
-            setError("Failed to load components. Please try again later.");
-            setIsLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, [isAuthReady, user, appId]);
     
     // --- Event Handlers ---
 
-    const handleLogin = async (email, password) => {
-        setAuthError(null);
-        try {
-            await signInWithEmailAndPassword(auth, email, password);
-        } catch (err) {
-            setAuthError(err.message);
-        }
-    };
-
-    const handleRegister = async (email, password) => {
-        setAuthError(null);
-        try {
-            await createUserWithEmailAndPassword(auth, email, password);
-        } catch (err) {
-            setAuthError(err.message);
-        }
-    };
-
-    const handleLogout = async () => {
-        try {
-            await signOut(auth);
-        } catch (err) {
-            console.error("Logout failed:", err);
-        }
-    };
-
     const generateComponentId = (name) => name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
         if (!newComponentName.trim() || !mainUrl.trim() || !latestUrl.trim()) {
             setError("All fields are required.");
-            return;
-        }
-        if (!user) {
-            setError("You must be logged in to add components.");
             return;
         }
         
         setError(null);
         const componentId = generateComponentId(newComponentName);
 
-        try {
-            const componentDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/components`, componentId);
-            await setDoc(componentDocRef, { name: newComponentName, mainUrl, latestUrl });
-            setNewComponentName('');
-            setMainUrl('');
-            setLatestUrl('');
-        } catch (err) {
-            console.error("Error adding document: ", err);
-            setError("Failed to save component.");
-        }
+        const newComponent = {
+            id: componentId,
+            name: newComponentName,
+            mainUrl,
+            latestUrl,
+        };
+
+        setComponents([...components, newComponent]);
+        setNewComponentName('');
+        setMainUrl('');
+        setLatestUrl('');
     };
 
-    const handleDelete = async (componentId) => {
-        if (!user) return;
-        try {
-            const componentDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/components`, componentId);
-            await deleteDoc(componentDocRef);
-        } catch (err) {
-            console.error("Error deleting document: ", err);
-            setError("Failed to delete component.");
-        }
+    const handleDelete = (componentId) => {
+        setComponents(components.filter(c => c.id !== componentId));
     };
 
     const handleStartEditing = (component) => {
@@ -225,24 +103,19 @@ export default function App() {
         setEditedLatestUrl('');
     };
 
-    const handleUpdateComponent = async (componentId) => {
-        if (!user) return;
+    const handleUpdateComponent = (componentId) => {
         if (!editedMainUrl.trim() || !editedLatestUrl.trim()) {
-            // Simple validation, could be more robust
             alert("URLs cannot be empty.");
             return;
         }
-        try {
-            const componentDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/components`, componentId);
-            await updateDoc(componentDocRef, {
-                mainUrl: editedMainUrl,
-                latestUrl: editedLatestUrl
-            });
-            handleCancelEditing(); // Exit edit mode on success
-        } catch (err) {
-            console.error("Error updating document: ", err);
-            setError("Failed to update component.");
-        }
+        
+        setComponents(components.map(c => 
+            c.id === componentId 
+            ? { ...c, mainUrl: editedMainUrl, latestUrl: editedLatestUrl } 
+            : c
+        ));
+        
+        handleCancelEditing(); // Exit edit mode on success
     };
     
     const handleCopyToClipboard = (text) => {
@@ -269,14 +142,6 @@ export default function App() {
         return '/r';
     }
 
-    if (!isAuthReady) {
-        return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-    }
-
-    if (!user) {
-        return <LoginScreen onLogin={handleLogin} onRegister={handleRegister} error={authError} />;
-    }
-
     return (
         <div className="bg-background text-foreground min-h-screen font-sans">
             <style>{`
@@ -300,12 +165,9 @@ export default function App() {
               `}</style>
             <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-5xl">
                 
-                <header className="mb-8 flex justify-between items-center">
-                    <div>
-                        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Figma Redirect Manager</h1>
-                        <p className="text-muted-foreground mt-2">Create, edit, and manage "pretty links" for your Figma components.</p>
-                    </div>
-                    <Button variant="outline" onClick={handleLogout}>Logout</Button>
+                <header className="mb-8">
+                    <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Figma Redirect Manager</h1>
+                    <p className="text-muted-foreground mt-2">Create, edit, and manage "pretty links" for your Figma components.</p>
                 </header>
 
                 <Card className="mb-8">
@@ -326,8 +188,8 @@ export default function App() {
                                 <Label htmlFor="latestUrl">Latest Branch URL</Label>
                                 <Input id="latestUrl" type="url" value={latestUrl} onChange={(e) => setLatestUrl(e.target.value)} placeholder="https://figma.com/design/.../latest-branch" />
                             </div>
-                            <Button type="submit" disabled={!isAuthReady || isLoading} className="w-full sm:w-auto">
-                                {isAuthReady ? 'Add Component' : 'Initializing...'}
+                            <Button type="submit" className="w-full sm:w-auto">
+                                Add Component
                             </Button>
                         </form>
                         {error && <p className="text-sm font-medium text-destructive mt-4">{error}</p>}
@@ -339,9 +201,7 @@ export default function App() {
                         <CardTitle>Managed Components</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        {isLoading ? (
-                            <p className="text-muted-foreground">Loading components...</p>
-                        ) : components.length === 0 ? (
+                        {components.length === 0 ? (
                             <p className="text-muted-foreground">No components added yet. Add one using the form above.</p>
                         ) : (
                             <div className="space-y-4">
@@ -410,9 +270,6 @@ export default function App() {
                         )}
                     </CardContent>
                 </Card>
-                 <footer className="text-center mt-8 text-sm text-muted-foreground">
-                    <p>Logged in as: <span className="font-mono">{user ? user.email : 'N/A'}</span></p>
-                 </footer>
             </div>
         </div>
     );
