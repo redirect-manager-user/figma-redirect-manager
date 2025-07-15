@@ -1,4 +1,22 @@
 import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+    getAuth, 
+    onAuthStateChanged, 
+    signInWithEmailAndPassword, 
+    signOut 
+} from 'firebase/auth';
+
+// --- Firebase Configuration ---
+// This configuration is loaded from your .env file.
+const firebaseConfig = process.env.REACT_APP_FIREBASE_CONFIG 
+    ? JSON.parse(process.env.REACT_APP_FIREBASE_CONFIG) 
+    : {};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
 
 // --- Helper function to get initial state from localStorage ---
 const getInitialState = (key, defaultValue) => {
@@ -56,7 +74,7 @@ const Label = ({ className, ...props }) => (
 );
 
 // --- Login Screen Component ---
-const LoginScreen = ({ onLogin, error }) => {
+const LoginScreen = ({ onLogin, error, isLoading }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
@@ -69,24 +87,23 @@ const LoginScreen = ({ onLogin, error }) => {
         <div className="flex items-center justify-center min-h-screen bg-background">
             <Card className="w-full max-w-sm">
                 <CardHeader>
-                    <CardTitle>Login</CardTitle>
+                    <CardTitle>Admin Login</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <form className="space-y-4" onSubmit={handleLogin}>
                         <div className="space-y-2">
                             <Label htmlFor="email">Email</Label>
-                            <Input id="email" type="email" placeholder="user@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                            <Input id="email" type="email" placeholder="user@example.com" value={email} onChange={(e) => setEmail(e.target.value)} disabled={isLoading} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="password">Password</Label>
-                            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={isLoading} />
                         </div>
                         {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-                        <Button type="submit" className="w-full">Login / Register</Button>
+                        <Button type="submit" className="w-full" disabled={isLoading}>
+                           {isLoading ? 'Logging in...' : 'Login'}
+                        </Button>
                     </form>
-                     <p className="mt-4 text-center text-sm text-muted-foreground">
-                        No real validation. Enter any details to proceed.
-                    </p>
                 </CardContent>
             </Card>
         </div>
@@ -99,10 +116,11 @@ const RedirectHandler = () => {
     const [message, setMessage] = useState('Looking for your link...');
 
     useEffect(() => {
-        const pathParts = window.location.pathname.split('/').filter(Boolean); // e.g., ['r', 'component-id', 'main']
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
         if (pathParts.length === 3 && pathParts[0] === 'r') {
             const [, componentId, branch] = pathParts;
-            const allComponents = getInitialState('components', []);
+            const userId = componentId.split('-')[0];
+            const allComponents = getInitialState(`components_${userId}`, []);
             const targetComponent = allComponents.find(c => c.id === componentId);
 
             if (targetComponent) {
@@ -134,9 +152,9 @@ const RedirectHandler = () => {
 
 // --- Main App Component ---
 export default function App() {
-    // --- State Management ---
-    const [user, setUser] = useState(() => getInitialState('user', null));
-    const [components, setComponents] = useState(() => getInitialState('components', []));
+    const [user, setUser] = useState(null);
+    const [isAuthLoading, setIsAuthLoading] = useState(true);
+    const [components, setComponents] = useState([]);
     
     const [newComponentName, setNewComponentName] = useState('');
     const [mainUrl, setMainUrl] = useState('');
@@ -145,46 +163,58 @@ export default function App() {
     const [authError, setAuthError] = useState(null);
     const [copiedLink, setCopiedLink] = useState(null);
 
-    // --- Edit State ---
     const [editingComponentId, setEditingComponentId] = useState(null);
     const [editedMainUrl, setEditedMainUrl] = useState('');
     const [editedLatestUrl, setEditedLatestUrl] = useState('');
 
-    // --- Effects to sync state with localStorage ---
     useEffect(() => {
-        try {
-            window.localStorage.setItem('user', JSON.stringify(user));
-        } catch (error) {
-            console.error("Error writing user to localStorage", error);
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+            setIsAuthLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        if (user) {
+            const savedComponents = getInitialState(`components_${user.uid}`, []);
+            setComponents(savedComponents);
+        } else {
+            setComponents([]);
         }
     }, [user]);
 
     useEffect(() => {
-        try {
-            window.localStorage.setItem('components', JSON.stringify(components));
-        } catch (error) {
-            console.error("Error writing components to localStorage", error);
+        if (user) {
+            try {
+                window.localStorage.setItem(`components_${user.uid}`, JSON.stringify(components));
+            } catch (error) {
+                console.error("Error writing components to localStorage", error);
+            }
         }
-    }, [components]);
+    }, [components, user]);
     
-    // --- Event Handlers ---
-    
-    const handleLogin = (email, password) => {
-        if (!email.trim() || !password.trim()) {
-            setAuthError("Email and password cannot be empty.");
-            return;
-        }
+    const handleLogin = async (email, password) => {
         setAuthError(null);
-        setUser({ email });
+        setIsAuthLoading(true);
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+        } catch (err) {
+            setAuthError("Invalid credentials. Please try again.");
+        } finally {
+            setIsAuthLoading(false);
+        }
     };
 
-    const handleLogout = () => {
-        setUser(null);
-        // Optionally clear data on logout:
-        // setComponents([]); 
+    const handleLogout = async () => {
+        await signOut(auth);
     };
 
-    const generateComponentId = (name) => name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const generateComponentId = (name) => {
+        const safeName = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        const userIdPrefix = user ? user.uid.substring(0, 6) : 'local';
+        return `${userIdPrefix}-${safeName}`;
+    }
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -201,13 +231,7 @@ export default function App() {
             return;
         }
 
-        const newComponent = {
-            id: componentId,
-            name: newComponentName,
-            mainUrl,
-            latestUrl,
-        };
-
+        const newComponent = { id: componentId, name: newComponentName, mainUrl, latestUrl };
         setComponents([...components, newComponent]);
         setNewComponentName('');
         setMainUrl('');
@@ -260,21 +284,20 @@ export default function App() {
         document.body.removeChild(textArea);
     };
 
-    // --- Render Logic ---
+    if (isAuthLoading) {
+        return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    }
 
-    // Route to the redirect handler if the path matches
     if (window.location.pathname.startsWith('/r/')) {
         return <RedirectHandler />;
     }
 
-    // Show login screen if no user
     if (!user) {
-        return <LoginScreen onLogin={handleLogin} error={authError} />;
+        return <LoginScreen onLogin={handleLogin} error={authError} isLoading={isAuthLoading} />;
     }
 
     const getBaseUrl = () => {
         if (typeof window !== 'undefined') {
-            // Reconstruct the base URL without any path
             return `${window.location.protocol}//${window.location.host}`;
         }
         return '';
