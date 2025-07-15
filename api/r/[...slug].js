@@ -27,8 +27,9 @@ function initializeFirebaseAdmin() {
   });
 }
 
-// --- The Serverless Function Handler ---
-export default async function handler(req, res) {
+// --- The Serverless Function Handler (using module.exports) ---
+// We use module.exports instead of 'export default' to match the CommonJS environment on Vercel.
+module.exports = async function handler(req, res) {
   const fallbackUrl = '/'; // Redirect to the homepage if a redirect URL can't be found.
 
   try {
@@ -90,18 +91,3 @@ export default async function handler(req, res) {
     return res.status(500).send('Internal Server Error. Please check the function logs for details.');
   }
 }
-```
-
-### **How to Fix the Error**
-
-1.  **Update the Code:** Replace the content of your `api/r/[...slug].js` file with the code above.
-2.  **Check Your Vercel Environment Variable:**
-    * Go to your Firebase Console -> Project Settings -> Service accounts.
-    * Click "Generate new private key" to download a JSON file.
-    * Open the JSON file and copy its **entire content**.
-    * Go to your Vercel Project -> Settings -> Environment Variables.
-    * Find the variable named `FIREBASE_SERVICE_ACCOUNT_KEY`.
-    * Ensure its value is the **exact, complete JSON content** you just copied. There should be no extra characters or missing brackets.
-3.  **Redeploy:** After saving the variable, trigger a new deployment in Vercel for the changes to take effect.
-
-Now, if the error happens again, check your Vercel function logs. The new code will print a much more specific error message telling you exactly what went wro
