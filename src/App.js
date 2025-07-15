@@ -1,4 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
+// --- Helper function to get initial state from localStorage ---
+const getInitialState = (key, defaultValue) => {
+    try {
+        const item = window.localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultValue;
+    } catch (error) {
+        console.error("Error reading from localStorage", error);
+        return defaultValue;
+    }
+};
+
 
 // --- Shadcn UI-style Components (using Tailwind CSS) ---
 
@@ -20,7 +32,7 @@ const CardContent = ({ className, ...props }) => (
 
 const Input = React.forwardRef(({ className, ...props }, ref) => (
     <input
-        className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+        className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
         ref={ref}
         {...props}
     />
@@ -43,24 +55,134 @@ const Label = ({ className, ...props }) => (
     <label className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 ${className}`} {...props} />
 );
 
+// --- Login Screen Component ---
+const LoginScreen = ({ onLogin, error }) => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+
+    const handleLogin = (e) => {
+        e.preventDefault();
+        onLogin(email, password);
+    };
+
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-background">
+            <Card className="w-full max-w-sm">
+                <CardHeader>
+                    <CardTitle>Login</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <form className="space-y-4" onSubmit={handleLogin}>
+                        <div className="space-y-2">
+                            <Label htmlFor="email">Email</Label>
+                            <Input id="email" type="email" placeholder="user@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="password">Password</Label>
+                            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                        </div>
+                        {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+                        <Button type="submit" className="w-full">Login / Register</Button>
+                    </form>
+                     <p className="mt-4 text-center text-sm text-muted-foreground">
+                        No real validation. Enter any details to proceed.
+                    </p>
+                </CardContent>
+            </Card>
+        </div>
+    );
+};
+
+
+// --- Redirect Handler Component ---
+const RedirectHandler = () => {
+    const [message, setMessage] = useState('Looking for your link...');
+
+    useEffect(() => {
+        const pathParts = window.location.pathname.split('/').filter(Boolean); // e.g., ['r', 'component-id', 'main']
+        if (pathParts.length === 3 && pathParts[0] === 'r') {
+            const [, componentId, branch] = pathParts;
+            const allComponents = getInitialState('components', []);
+            const targetComponent = allComponents.find(c => c.id === componentId);
+
+            if (targetComponent) {
+                const url = branch === 'main' ? targetComponent.mainUrl : targetComponent.latestUrl;
+                if (url) {
+                    setMessage(`Redirecting to ${branch} branch...`);
+                    window.location.replace(url);
+                } else {
+                    setMessage(`Error: Branch "${branch}" not found for this component.`);
+                }
+            } else {
+                setMessage(`Error: Could not find a component with the ID "${componentId}".`);
+            }
+        } else {
+            setMessage('Error: Invalid redirect link format.');
+        }
+    }, []);
+
+    return (
+         <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
+            <div className="text-center">
+                <h1 className="text-2xl font-bold mb-4">Figma Redirector</h1>
+                <p>{message}</p>
+            </div>
+        </div>
+    );
+};
+
 
 // --- Main App Component ---
-
 export default function App() {
     // --- State Management ---
-    const [components, setComponents] = useState([]);
+    const [user, setUser] = useState(() => getInitialState('user', null));
+    const [components, setComponents] = useState(() => getInitialState('components', []));
+    
     const [newComponentName, setNewComponentName] = useState('');
     const [mainUrl, setMainUrl] = useState('');
     const [latestUrl, setLatestUrl] = useState('');
     const [error, setError] = useState(null);
+    const [authError, setAuthError] = useState(null);
     const [copiedLink, setCopiedLink] = useState(null);
 
     // --- Edit State ---
     const [editingComponentId, setEditingComponentId] = useState(null);
     const [editedMainUrl, setEditedMainUrl] = useState('');
     const [editedLatestUrl, setEditedLatestUrl] = useState('');
+
+    // --- Effects to sync state with localStorage ---
+    useEffect(() => {
+        try {
+            window.localStorage.setItem('user', JSON.stringify(user));
+        } catch (error) {
+            console.error("Error writing user to localStorage", error);
+        }
+    }, [user]);
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem('components', JSON.stringify(components));
+        } catch (error) {
+            console.error("Error writing components to localStorage", error);
+        }
+    }, [components]);
     
     // --- Event Handlers ---
+    
+    const handleLogin = (email, password) => {
+        if (!email.trim() || !password.trim()) {
+            setAuthError("Email and password cannot be empty.");
+            return;
+        }
+        setAuthError(null);
+        setUser({ email });
+    };
+
+    const handleLogout = () => {
+        setUser(null);
+        // Optionally clear data on logout:
+        // setComponents([]); 
+    };
 
     const generateComponentId = (name) => name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
@@ -73,6 +195,11 @@ export default function App() {
         
         setError(null);
         const componentId = generateComponentId(newComponentName);
+
+        if (components.some(c => c.id === componentId)) {
+            setError("A component with this name already exists. Please choose a unique name.");
+            return;
+        }
 
         const newComponent = {
             id: componentId,
@@ -115,7 +242,7 @@ export default function App() {
             : c
         ));
         
-        handleCancelEditing(); // Exit edit mode on success
+        handleCancelEditing();
     };
     
     const handleCopyToClipboard = (text) => {
@@ -135,11 +262,22 @@ export default function App() {
 
     // --- Render Logic ---
 
+    // Route to the redirect handler if the path matches
+    if (window.location.pathname.startsWith('/r/')) {
+        return <RedirectHandler />;
+    }
+
+    // Show login screen if no user
+    if (!user) {
+        return <LoginScreen onLogin={handleLogin} error={authError} />;
+    }
+
     const getBaseUrl = () => {
         if (typeof window !== 'undefined') {
-            return `${window.location.protocol}//${window.location.host}/r`;
+            // Reconstruct the base URL without any path
+            return `${window.location.protocol}//${window.location.host}`;
         }
-        return '/r';
+        return '';
     }
 
     return (
@@ -165,9 +303,12 @@ export default function App() {
               `}</style>
             <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-5xl">
                 
-                <header className="mb-8">
-                    <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Figma Redirect Manager</h1>
-                    <p className="text-muted-foreground mt-2">Create, edit, and manage "pretty links" for your Figma components.</p>
+                <header className="mb-8 flex justify-between items-center">
+                    <div>
+                        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Figma Redirect Manager</h1>
+                        <p className="text-muted-foreground mt-2">Create, edit, and manage "pretty links" for your Figma components.</p>
+                    </div>
+                    <Button variant="outline" onClick={handleLogout}>Logout</Button>
                 </header>
 
                 <Card className="mb-8">
@@ -210,7 +351,6 @@ export default function App() {
                                     return (
                                         <div key={comp.id} className="p-4 border rounded-lg">
                                             {isEditing ? (
-                                                // --- EDITING VIEW ---
                                                 <div className="space-y-4">
                                                     <h3 className="font-semibold text-lg truncate">{comp.name}</h3>
                                                     <div className="space-y-2">
@@ -227,7 +367,6 @@ export default function App() {
                                                     </div>
                                                 </div>
                                             ) : (
-                                                // --- DISPLAY VIEW ---
                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                                     <div className="flex-grow min-w-0">
                                                         <h3 className="font-semibold text-lg truncate">{comp.name}</h3>
@@ -244,8 +383,8 @@ export default function App() {
                                                              <div className="mt-3 pt-3 border-t space-y-2">
                                                                 <p className="font-semibold text-sm">Pretty Links:</p>
                                                                 {[
-                                                                    { label: 'Main', link: `${getBaseUrl()}/${comp.id}/main` },
-                                                                    { label: 'Latest', link: `${getBaseUrl()}/${comp.id}/latest` }
+                                                                    { label: 'Main', link: `${getBaseUrl()}/r/${comp.id}/main` },
+                                                                    { label: 'Latest', link: `${getBaseUrl()}/r/${comp.id}/latest` }
                                                                 ].map(({ label, link }) => (
                                                                     <div key={label} className="flex items-center gap-2 group">
                                                                         <a href={link} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline truncate block">{link}</a>
@@ -270,6 +409,9 @@ export default function App() {
                         )}
                     </CardContent>
                 </Card>
+                 <footer className="text-center mt-8 text-sm text-muted-foreground">
+                    <p>Logged in as: <span className="font-mono">{user ? user.email : 'N/A'}</span></p>
+                 </footer>
             </div>
         </div>
     );
