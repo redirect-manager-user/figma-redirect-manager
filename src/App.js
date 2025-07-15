@@ -69,44 +69,6 @@ const LoginScreen = ({ onLogin, error, isLoading }) => {
     );
 };
 
-// --- Redirect Handler Component ---
-const RedirectHandler = () => {
-    const [message, setMessage] = useState('Looking for your link...');
-    useEffect(() => {
-        const pathParts = window.location.pathname.split('/').filter(Boolean);
-        const findAndRedirect = async () => {
-            if (pathParts.length === 3 && pathParts[0] === 'r') {
-                const [, componentId, branch] = pathParts;
-                try {
-                    const docRef = doc(db, 'components', componentId);
-                    const docSnap = await getDoc(docRef);
-                    if (docSnap.exists()) {
-                        const targetComponent = docSnap.data();
-                        const url = branch === 'main' ? targetComponent.mainUrl : targetComponent.latestUrl;
-                        if (url) {
-                            setMessage(`Redirecting to ${branch} branch...`);
-                            window.location.replace(url);
-                        } else {
-                            setMessage(`Error: Branch "${branch}" not found for this component.`);
-                        }
-                    } else {
-                        setMessage(`Error: Could not find a component with the ID "${componentId}".`);
-                    }
-                } catch (err) {
-                    setMessage(`Error fetching redirect link: ${err.message}`);
-                }
-            } else {
-                setMessage('Error: Invalid redirect link format.');
-            }
-        };
-        findAndRedirect();
-    }, []);
-    return (
-        <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
-            <div className="text-center"><h1 className="text-2xl font-bold mb-4">Figma Redirector</h1><p>{message}</p></div>
-        </div>
-    );
-};
 
 // --- Main App Component ---
 export default function App() {
@@ -256,7 +218,6 @@ export default function App() {
     };
 
     if (isAuthLoading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-    if (window.location.pathname.startsWith('/r/')) return <RedirectHandler />;
     if (!user) return <LoginScreen onLogin={handleLogin} error={authError} isLoading={isAuthLoading} />;
 
     const getBaseUrl = () => window.location.protocol + '//' + window.location.host;
