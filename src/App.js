@@ -87,7 +87,7 @@ const LoginScreen = ({ onLogin, error, isLoading }) => {
         <div className="flex items-center justify-center min-h-screen bg-background">
             <Card className="w-full max-w-sm">
                 <CardHeader>
-                    <CardTitle>Admin Login</CardTitle>
+                    <CardTitle>Figma Redirect Manager Login</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <form className="space-y-4" onSubmit={handleLogin}>
@@ -100,7 +100,7 @@ const LoginScreen = ({ onLogin, error, isLoading }) => {
                             <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={isLoading} />
                         </div>
                         {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-                        <Button type="submit" className="w-full" disabled={isLoading}>
+                        <Button type="submit" className="w-full" disabled={isLoading} variant="default">
                            {isLoading ? 'Logging in...' : 'Login'}
                         </Button>
                     </form>
