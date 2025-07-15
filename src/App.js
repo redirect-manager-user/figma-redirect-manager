@@ -1,26 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { 
-    getAuth, 
-    onAuthStateChanged, 
-    signInWithEmailAndPassword, 
-    signOut 
+import {
+    getAuth,
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    signOut
 } from 'firebase/auth';
-import { 
+import {
     getFirestore,
     collection,
     query,
     where,
     onSnapshot,
     doc,
+    getDoc, // <-- This was the missing import
     setDoc,
     updateDoc,
     deleteDoc
 } from 'firebase/firestore';
 
 // --- Firebase Configuration ---
-const firebaseConfig = process.env.REACT_APP_FIREBASE_CONFIG 
-    ? JSON.parse(process.env.REACT_APP_FIREBASE_CONFIG) 
+// It's recommended to use environment variables for security
+const firebaseConfig = process.env.REACT_APP_FIREBASE_CONFIG
+    ? JSON.parse(process.env.REACT_APP_FIREBASE_CONFIG)
     : {};
 
 // Initialize Firebase
